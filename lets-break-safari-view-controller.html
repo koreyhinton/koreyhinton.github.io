@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<head><title>Let's Break Safari View Controller</title></head>
+<body>
+Today I found out something interesting about the new iOS 9 Safari View Controller. In case you were wondering the SFSafariViewController is the controller that looks and behaves almost identically to launching Safari from your app. The only 2 features that sets it apart from launching the Safari app from your app is its animation to Safari looks different (it looks like an "in-app transition" rather than a "switching apps transition") and you can press Done to dismiss and return to your app instead of manually navigating back to your app (with 4 finger horizontal swipe). Everything else looks and behaves the same, as far as I can tell. If your dream was to extend the Safari browser then you are in luck, you are able to modify 2 things: (1) you can allow or disallow reader mode or (2) block content like ads &lt;/sarcasm&gt;. Seriously though the Safari Controller only takes 2 lines of code if you do care about when it finishes loading or dismisses (use the delegate if you do care about those callbacks). The funny thing is that for some strange reason these 2 lines of code have to be right next to each other :(. The first line of code initializes the safari controller and it requires a valid url as input and then the second line presents the safari controller. Here they are:
+<pre>
+let safariController = SFSafariViewController(URL: NSURL(string: "http://www.google.com")!)
+presentViewController(safariController, animated: true, completion: nil)
+</pre>
+
+Now one thing that might make sense would be to load the controller in <i>viewDidLoad</i> and then present it when a user taps on a button. If you try this it will not work.
+
+<pre>
+class ViewController: UIViewController {
+
+    var safariController: SFSafariViewController!
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let btn = UIButton(type: .InfoDark)
+        btn.addTarget(self, action: "action", forControlEvents: .TouchUpInside)
+        view.addSubview(btn)
+        
+        safariController = SFSafariViewController(URL: NSURL(string: "http://www.google.com")!)
+    }
+
+    func action() {
+        presentViewController(safariController, animated: true, completion: nil)
+    }
+}
+</pre>
+
+For some reason the code above doesn't work. It presents an empty view controller. Oddly enough if you access the safari controller's view immediately after initialization you'll be safe for some reason:
+<pre>
+//...
+        safariController = SFSafariViewController(URL: NSURL(string: "http://www.google.com")!)
+        let _ = safariController.view
+    }
+
+    func action() {
+        presentViewController(safariController, animated: true, completion: nil)
+    }
+}
+</pre>
+So if you either present the controller immediately after initializing it or do this strange hack (of accessing the view) it'll work. But the question becomes how soon after initialization do we have to do something with it before losing it? Hmmm. Let's reuse a nice delay function I found on SO: (http://stackoverflow.com/a/24318861/1394020).
+<pre>
+func delay(delay:Double, closure:()->()) {
+    dispatch_after(
+        dispatch_time(
+            DISPATCH_TIME_NOW,
+            Int64(delay * Double(NSEC_PER_SEC))
+        ),
+        dispatch_get_main_queue(), closure)
+}
+</pre>
+Now let's use this delay function to see how long is too long before safari goes blank:
+<pre>
+//...
+        safariController = SFSafariViewController(URL: NSURL(string: "http://www.google.com")!)
+        delay(0.1) { () -> () in
+            let _ = self.safariController.view
+        }
+    }
+
+    func action() {
+        presentViewController(safariController, animated: true, completion: nil)
+    }
+}
+</pre>
+Ok so it still works with 0.1. For me it starts breaking at 0.39 seconds, ymmv:
+<pre>
+delay(0.39) { () -> () in
+  let _ = self.safariController.view
+}
+</pre>
+Anyway, I'm assuming this is a bug. Certainly this implicit coupling wasn't intentional, or was it?
+</body>
+</html>
